@@ -5,10 +5,12 @@ Two modes:
                               Fast, no local deps, pay-per-call.
   * mode="local"            — yt-dlp + faster-whisper + OpenAI + ffmpeg/opencv.
                               Self-hosted, OPENAI_API_KEY required for the LLM.
+                              Supports word-level karaoke subtitles.
 """
 from typing import Dict, List, Optional
 
 from .clipper import crop_highlights
+from .config import SUBTITLES_ENABLED, get_subtitle_style
 from .downloader import download_youtube
 from .highlights import call_muapi_llm, get_highlights
 from .transcriber import transcribe
@@ -20,6 +22,7 @@ def _run_local(
     aspect_ratio: str,
     download_format: str,
     language: Optional[str],
+    subtitles: bool,
 ) -> Dict:
     from .local.clipper import crop_highlights_local
     from .local.downloader import download_youtube_local
@@ -42,7 +45,14 @@ def _run_local(
     top = sorted(all_highlights, key=lambda h: int(h.get("score", 0)), reverse=True)[:num_clips]
     print(f"[pipeline/local] cropping {len(top)} of {len(all_highlights)} candidates", flush=True)
 
-    shorts = crop_highlights_local(source_path, top, aspect_ratio=aspect_ratio)
+    shorts = crop_highlights_local(
+        source_path,
+        top,
+        aspect_ratio=aspect_ratio,
+        segments=transcript["segments"],
+        subtitles_enabled=subtitles,
+        subtitle_style=get_subtitle_style() if subtitles else None,
+    )
 
     return {
         "mode": "local",
@@ -50,6 +60,7 @@ def _run_local(
         "transcript": transcript,
         "highlights": all_highlights,
         "shorts": shorts,
+        "subtitles": subtitles,
     }
 
 
@@ -59,7 +70,15 @@ def _run_api(
     aspect_ratio: str,
     download_format: str,
     language: Optional[str],
+    subtitles: bool,
 ) -> Dict:
+    if subtitles:
+        print(
+            "[pipeline] note: --subtitles is currently only implemented for --mode local; "
+            "API-mode clips will be rendered without burn-in.",
+            flush=True,
+        )
+
     source_url = download_youtube(youtube_url, fmt=download_format)
 
     transcript = transcribe(source_url, language=language)
@@ -84,6 +103,7 @@ def _run_api(
         "transcript": transcript,
         "highlights": all_highlights,
         "shorts": shorts,
+        "subtitles": False,
     }
 
 
@@ -94,6 +114,7 @@ def generate_shorts(
     download_format: str = "720",
     language: Optional[str] = None,
     mode: str = "api",
+    subtitles: Optional[bool] = None,
 ) -> Dict:
     """Run the full pipeline and return a structured result.
 
@@ -105,6 +126,9 @@ def generate_shorts(
         language: ISO-639-1 to force Whisper language detection.
         mode: "api" (default, MuAPI) or "local" (yt-dlp + faster-whisper +
             OpenAI + ffmpeg).
+        subtitles: burn word-level karaoke captions into each short.
+            Defaults to the SUBTITLES_ENABLED env var (True by default).
+            Only effective in --mode local for now.
 
     Returns:
         {
@@ -113,11 +137,13 @@ def generate_shorts(
           "transcript": {...},
           "highlights": [...],       # all candidates ranked
           "shorts": [...],           # top `num_clips` with clip_url / local path
+          "subtitles": bool,         # whether subtitles were burned in
         }
     """
     mode = (mode or "api").lower()
+    subs = SUBTITLES_ENABLED if subtitles is None else bool(subtitles)
     if mode == "local":
-        return _run_local(youtube_url, num_clips, aspect_ratio, download_format, language)
+        return _run_local(youtube_url, num_clips, aspect_ratio, download_format, language, subs)
     if mode == "api":
-        return _run_api(youtube_url, num_clips, aspect_ratio, download_format, language)
+        return _run_api(youtube_url, num_clips, aspect_ratio, download_format, language, subs)
     raise ValueError(f"Unknown mode: {mode!r}. Use 'api' or 'local'.")

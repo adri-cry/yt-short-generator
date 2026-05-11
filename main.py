@@ -8,6 +8,16 @@ import argparse
 import json
 import sys
 
+# Force UTF-8 on stdout/stderr so Unicode arrows etc. don't blow up on the
+# default Windows cp1252 console.
+for _stream in (sys.stdout, sys.stderr):
+    reconfigure = getattr(_stream, "reconfigure", None)
+    if reconfigure:
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 from shorts_generator import generate_shorts
 
 
@@ -24,6 +34,12 @@ def main() -> int:
     parser.add_argument("--aspect-ratio", default="9:16", help="Output aspect ratio (default: 9:16)")
     parser.add_argument("--format", default="720", help="Source download resolution: 360 / 480 / 720 / 1080 (default: 720)")
     parser.add_argument("--language", default=None, help="Force Whisper language code, e.g. 'en' (default: auto-detect)")
+    parser.add_argument(
+        "--subtitles",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Burn word-level karaoke captions into each short (default: SUBTITLES_ENABLED env, ON). Local mode only.",
+    )
     parser.add_argument("--output-json", default=None, help="Write the full result JSON to this path")
     args = parser.parse_args()
 
@@ -35,6 +51,7 @@ def main() -> int:
             download_format=args.format,
             language=args.language,
             mode=args.mode,
+            subtitles=args.subtitles,
         )
     except Exception as e:
         print(f"\nFAILED: {e}", file=sys.stderr)

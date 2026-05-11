@@ -27,6 +27,7 @@ Built for creators, agencies, and developers who don't want to pay $20–$300/mo
 ## Features
 
 - **🎬 YouTube In, Vertical Out**: Hand it any YouTube URL — get back N viral-ready 9:16 mp4s
+- **💬 Word-Level Karaoke Subtitles**: Local mode burns pop-in captions (2-3 words at a time, active word highlighted) straight into each short — same look as CapCut/Opus Clip presets, no extra tooling
 - **🔀 Two Modes — API (fast) or Local (offline)**: Default `--mode api` uses MuAPI for download/transcription/cropping; `--mode local` runs entirely on your machine with `yt-dlp`, `faster-whisper`, OpenAI, and `ffmpeg`/`opencv` — pick what fits
 - **🤖 Virality-Aware Highlight Selection**: Clips ranked on hooks, emotional peaks, opinion bombs, revelation moments, conflict, quotable lines, story peaks, and practical value — not just generic "interesting"
 - **📈 Score + Hook + Reason for Every Clip**: Each highlight comes with a viral score, an opening hook line, and a one-sentence explanation of why it works
@@ -56,8 +57,8 @@ Don't want to self-host? The [AI Clipping API](https://muapi.ai/playground/ai-cl
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/SamurAIGPT/AI-Youtube-Shorts-Generator.git
-   cd AI-Youtube-Shorts-Generator
+   git clone https://github.com/adri-cry/yt-short-generator.git
+   cd yt-short-generator
    ```
 
 2. **Create and activate a virtual environment:**
@@ -147,6 +148,7 @@ xargs -a urls.txt -I{} python main.py "{}"
 | `--aspect-ratio` | `9:16` | Any ratio; `9:16` for TikTok/Reels, `1:1` for square |
 | `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
 | `--language` | auto | Force Whisper language code (e.g. `en`) |
+| `--subtitles` / `--no-subtitles` | on | Burn word-level karaoke captions into each short (local mode only) |
 | `--output-json` | — | Dump the full result (transcript + all candidates) to a file |
 
 ### API mode vs Local mode
@@ -229,6 +231,20 @@ Edit `shorts_generator/config.py` (or set env vars):
 ### Whisper transcription
 Audio is transcribed by MuAPI's `/openai-whisper` endpoint (server-side `whisper-1`). Pass `--language <code>` to lock the recognition to a specific language; otherwise it auto-detects.
 
+### Subtitles (local mode)
+Local mode can burn word-level karaoke captions into each short: 2-3 words pop in at a time, with the active word swept in yellow as it's spoken — the same look Opus Clip and CapCut use on viral shorts. Enabled by default; toggle with `--subtitles` / `--no-subtitles` (or `SUBTITLES_ENABLED` env).
+
+Tune the look via `.env` (see `.env.example` for the full list):
+
+- `SUBTITLE_FONT` — font family (falls back via fontconfig if missing)
+- `SUBTITLE_FONT_SIZE_RATIO` — font size as a fraction of video height (default `0.055`)
+- `SUBTITLE_PRIMARY_COLOR` / `SUBTITLE_HIGHLIGHT_COLOR` / `SUBTITLE_OUTLINE_COLOR` — ASS colours (`&HAABBGGRR`)
+- `SUBTITLE_MARGIN_V_RATIO` — distance from the bottom edge as a fraction of height
+- `SUBTITLE_WORDS_PER_CHUNK` / `SUBTITLE_MAX_CHUNK_SECONDS` — chunking behaviour
+- `SUBTITLE_UPPERCASE`, `SUBTITLE_BOLD` — text styling
+
+Requires `ffmpeg` built with `libass` (standard in the official builds).
+
 ## Project Structure
 
 ```
@@ -238,18 +254,19 @@ AI-Youtube-Shorts-Generator/
 ├── requirements-local.txt        optional deps for --mode local
 ├── .env.example
 └── shorts_generator/
-    ├── config.py                 env / settings (MuAPI + OpenAI + Whisper)
+    ├── config.py                 env / settings (MuAPI + OpenAI + Whisper + subtitles)
     ├── muapi.py                  generic submit + poll wrapper
     ├── downloader.py             API mode: YouTube download via MuAPI
     ├── transcriber.py            API mode: MuAPI /openai-whisper client
     ├── highlights.py             shared LLM virality ranking (pluggable backend)
     ├── clipper.py                API mode: MuAPI /autocrop
+    ├── subtitles.py              word-level karaoke ASS generator + ffmpeg burn-in
     ├── pipeline.py               mode dispatcher (api ↔ local)
     └── local/                    --mode local backends (offline)
         ├── downloader.py         yt-dlp download
-        ├── transcriber.py        faster-whisper transcription
+        ├── transcriber.py        faster-whisper transcription (word timestamps)
         ├── llm.py                OpenAI chat-completions client
-        └── clipper.py            ffmpeg cut + OpenCV vertical crop
+        └── clipper.py            ffmpeg cut + OpenCV vertical crop + subtitle burn-in
 ```
 
 ## Troubleshooting

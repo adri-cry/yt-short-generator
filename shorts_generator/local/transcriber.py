@@ -39,14 +39,30 @@ def transcribe_local(media_path: str, language: Optional[str] = None) -> Dict:
         beam_size=5,
         vad_filter=True,
         condition_on_previous_text=False,
+        word_timestamps=True,
     )
 
     segments = []
     for s in segments_iter:
+        words = []
+        for w in (getattr(s, "words", None) or []):
+            w_text = (getattr(w, "word", None) or "").strip()
+            if not w_text:
+                continue
+            w_start = getattr(w, "start", None)
+            w_end = getattr(w, "end", None)
+            if w_start is None or w_end is None:
+                continue
+            words.append({
+                "start": float(w_start),
+                "end": float(w_end),
+                "word": w_text,
+            })
         segments.append({
             "start": float(s.start),
             "end": float(s.end),
             "text": (s.text or "").strip(),
+            "words": words,
         })
 
     duration = float(getattr(info, "duration", 0.0)) or (segments[-1]["end"] if segments else 0.0)
