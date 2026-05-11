@@ -1,123 +1,96 @@
-# AI YouTube Shorts Generator
+# yt-short-generator
 
-**The open-source alternative to Opus Clip, Vidyo.ai, Klap, SubMagic, 2short.ai, and other AI clipping tools.** Drop in any long-form YouTube video and get back ranked, viral-ready 9:16 shorts — for free, with no per-clip credits, no watermarks, and full control over the highlight algorithm.
+Turn any long-form YouTube video into ranked, vertical shorts — all offline on your own machine. A YouTube URL goes in; viral-worthy 9:16 clips with burned-in word-by-word karaoke captions come out.
 
-Built for creators, agencies, and developers who don't want to pay $20–$300/month or be capped on minutes processed. Uses GPT-class LLM highlight detection and Whisper transcription to extract the most viral-worthy moments and auto-crop them vertically for TikTok, Reels, and Shorts.
+Built because the existing SaaS options (Opus Clip, Klap, Vidyo.ai, SubMagic, …) charge monthly subscriptions, cap your minutes, and watermark free-tier output. This runs locally with `yt-dlp` + `faster-whisper` + `ffmpeg` + OpenCV, plus any OpenAI-compatible LLM endpoint you point it at.
 
-> **Building your own Opus Clip–style SaaS?** Skip the infra and ship on the same APIs that power this repo:
-> - [AI Clipping API](https://muapi.ai/playground/ai-clipping) — end-to-end clip selection + render
-> - [Auto-Crop API](https://muapi.ai/playground/autocrop) — vertical reframing only
+> Status: local mode is the main pipeline and what I actually use day-to-day. A legacy API mode that delegates each step to MuAPI is still present in the code for reference, but it's not the path I ship against.
 
-![longshorts](https://github.com/user-attachments/assets/3f5d1abf-bf3b-475f-8abf-5e253003453a)
+## What you get
 
-## Why Use This Instead of Opus Clip / Vidyo.ai / Klap?
+- **YouTube URL in, vertical mp4s out.** Hand it any URL, get back N viral-ready 9:16 shorts saved to `output/`.
+- **Word-level karaoke captions.** 2-3 words pop in at a time, active word swept in yellow — the same CapCut/Opus Clip look. Fully configurable via env vars (font, size, colour, position, chunking).
+- **Stabilised face-aware pan.** Two-pass reframing: sample face detections, median-filter the series, linear-interpolate the gaps, exponential-smooth the trajectory, lock the Y axis. No jittery, seasick crops.
+- **LLM highlight ranking.** Videos are scored through a virality framework — hooks, emotional peaks, opinion bombs, revelations, conflict, quotables, story peaks, practical value. Long videos (>30 min) are auto-chunked with overlap so cross-boundary clips aren't lost.
+- **Works with any OpenAI-compatible LLM.** OpenAI direct, Azure, self-hosted router, 9router — just set `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`.
+- **CLI + Python lib.** Run from the shell or `from shorts_generator import generate_shorts` in your own code.
+- **Structured JSON output.** `--output-json` dumps the full transcript + every candidate highlight + final clip paths for downstream automation.
 
-| | This repo | Opus Clip / Vidyo.ai / Klap / SubMagic |
-|---|---|---|
-| **Price** | Free + open source (pay only for API usage) | $20–$300/month subscriptions |
-| **Per-clip credits** | None — process unlimited videos | Monthly minute caps, overage fees |
-| **Watermarks** | Never | On free tiers |
-| **Highlight algorithm** | Fully editable virality framework | Black box |
-| **Output format** | Any aspect ratio, any resolution | Locked presets |
-| **Batch processing** | `xargs` an entire URL list | Manual upload one-by-one |
-| **JSON / API output** | Built-in (`--output-json`) | Limited or paid tier only |
-| **Self-hostable** | Yes — runs on your machine or server | SaaS only, your videos sit on their servers |
-| **White-label / embeddable** | Yes — MIT licensed, import as Python lib | No |
+## Requirements
 
-## Features
+- **Python 3.10+** (tested on 3.11 and 3.14)
+- **ffmpeg** on your PATH, ideally with `libass` support (the official Windows/macOS/Linux builds all ship it)
+- An **OpenAI-compatible LLM key** — OpenAI, a local router, whatever you prefer
+- CPU is fine for `faster-whisper` at the `base` model; CUDA if you want it faster or want to run `large-v3`
 
-- **🎬 YouTube In, Vertical Out**: Hand it any YouTube URL — get back N viral-ready 9:16 mp4s
-- **💬 Word-Level Karaoke Subtitles**: Local mode burns pop-in captions (2-3 words at a time, active word highlighted) straight into each short — same look as CapCut/Opus Clip presets, no extra tooling
-- **🔀 Two Modes — API (fast) or Local (offline)**: Default `--mode api` uses MuAPI for download/transcription/cropping; `--mode local` runs entirely on your machine with `yt-dlp`, `faster-whisper`, OpenAI, and `ffmpeg`/`opencv` — pick what fits
-- **🤖 Virality-Aware Highlight Selection**: Clips ranked on hooks, emotional peaks, opinion bombs, revelation moments, conflict, quotable lines, story peaks, and practical value — not just generic "interesting"
-- **📈 Score + Hook + Reason for Every Clip**: Each highlight comes with a viral score, an opening hook line, and a one-sentence explanation of why it works
-- **🎤 Whisper Transcription, Your Choice**: Cloud (`/openai-whisper` via MuAPI) or local (`faster-whisper`, CPU or CUDA) — same downstream output shape
-- **🧩 Long-Video Aware**: Videos over 30 minutes are auto-chunked with overlap so nothing gets missed
-- **♻️ Smart Dedupe**: Overlapping highlights are collapsed by score so you never get two near-duplicate clips
-- **🎯 Smart Vertical Crop**: API mode uses MuAPI's auto-crop; local mode runs OpenCV face tracking with motion smoothing
-- **📱 Any Aspect Ratio**: 9:16 for TikTok/Reels/Shorts, 1:1 for square, anything else by flag
-- **🧰 CLI + Python Library**: Use it from the shell or import `generate_shorts(...)` into your own pipeline
-- **📦 JSON Output**: `--output-json` dumps the full result (transcript + every candidate highlight + final clip URLs/paths) for downstream automation
+## Install
 
-## Quick Start (No Setup)
+```bash
+git clone https://github.com/adri-cry/yt-short-generator.git
+cd yt-short-generator
 
-Don't want to self-host? The [AI Clipping API](https://muapi.ai/playground/ai-clipping) gives you the same Opus Clip–style pipeline as a single HTTP call — no Python, no dependencies, pay-per-clip instead of monthly subscriptions.
+# venv (strongly recommended)
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
 
----
+pip install -r requirements.txt
+pip install -r requirements-local.txt
+```
 
-## Installation (Self-Hosted)
+Copy `.env.example` to `.env` and fill in your keys:
 
-### Prerequisites
+```ini
+# LLM highlight ranking — any OpenAI-compatible endpoint
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1   # or your router
+OPENAI_MODEL=gpt-4o-mini                    # or claude, etc.
 
-- Python 3.10+
-- For **API mode (default)**: a MuAPI key — powers download, transcription, highlight ranking, and clipping in a single dependency
-- For **Local mode** (`--mode local`): `ffmpeg` on your PATH and an `OPENAI_API_KEY` (only the LLM step is remote; everything else runs offline)
+# Whisper (fully local)
+LOCAL_WHISPER_MODEL=base        # tiny / base / small / medium / large-v3
+LOCAL_WHISPER_DEVICE=auto       # auto / cpu / cuda
+LOCAL_OUTPUT_DIR=output
+```
 
-### Steps
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/adri-cry/yt-short-generator.git
-   cd yt-short-generator
-   ```
-
-2. **Create and activate a virtual environment:**
-   ```bash
-   python3.10 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   # Only if you plan to use --mode local:
-   pip install -r requirements-local.txt
-   ```
-
-4. **Set up environment variables:**
-
-   Create a `.env` file in the project root:
-   ```bash
-   # API mode (default)
-   MUAPI_API_KEY=your_muapi_key_here
-
-   # Local mode (--mode local) — only the OPENAI key is required
-   OPENAI_API_KEY=your_openai_key_here
-   OPENAI_MODEL=gpt-4o-mini          # optional, default gpt-4o-mini
-   LOCAL_WHISPER_MODEL=base          # tiny / base / small / medium / large-v3
-   LOCAL_WHISPER_DEVICE=auto         # auto / cpu / cuda
-   LOCAL_OUTPUT_DIR=output           # where local mp4s land
-   ```
+Subtitle styling env vars live alongside these — see `.env.example` for the full list.
 
 ## Usage
 
-### Single video (API mode — default)
-
 ```bash
-python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-### Single video (Local mode — runs offline except for the LLM call)
-
-```bash
+# Simplest run — local mode, 3 shorts with burned-in karaoke captions
 python main.py "https://www.youtube.com/watch?v=VIDEO_ID" --mode local
 ```
 
-Local mode writes the rendered shorts to `./output/short_01.mp4`, `short_02.mp4`, … (override with `LOCAL_OUTPUT_DIR`).
+Rendered clips land in `./output/short_01.mp4`, `short_02.mp4`, …
 
-### With options
+### More options
 
 ```bash
 python main.py "https://www.youtube.com/watch?v=VIDEO_ID" \
-    --mode api \
+    --mode local \
     --num-clips 5 \
     --aspect-ratio 9:16 \
+    --format 720 \
+    --language id \
+    --no-subtitles \
     --output-json result.json
 ```
 
-### Local file
+### CLI flags
 
-Drop in a hosted mp4 URL directly via the Python API (the CLI is YouTube-first):
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--mode` | `api` | `local` runs the full offline pipeline (the one this repo is built around) |
+| `--num-clips` | `3` | How many shorts to render |
+| `--aspect-ratio` | `9:16` | Any ratio; `9:16` for TikTok/Reels/Shorts, `1:1` for square |
+| `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
+| `--language` | auto | Force Whisper language code, e.g. `en`, `id` |
+| `--subtitles` / `--no-subtitles` | on | Burn word-level karaoke captions (local mode only) |
+| `--output-json` | — | Dump the full run result to a JSON file |
+
+### Python API
 
 ```python
 from shorts_generator import generate_shorts
@@ -126,79 +99,65 @@ result = generate_shorts(
     "https://www.youtube.com/watch?v=...",
     num_clips=5,
     aspect_ratio="9:16",
+    mode="local",
 )
+
 for short in result["shorts"]:
     print(short["score"], short["title"], short["clip_url"])
 ```
 
-### Batch processing
+### Re-rendering without re-downloading
 
-Create a `urls.txt` file with one URL per line, then:
+`rerender.py` reuses a source mp4 already on disk (handy if YouTube rate-limits you, or you want to tweak the subtitle style without paying the download cost again). It also caches the Whisper transcript so only the first run pays for transcription.
 
 ```bash
-xargs -a urls.txt -I{} python main.py "{}"
+python rerender.py --source output/source_VIDEO_ID.mp4 --num-clips 3
 ```
 
-### CLI flags
+### Batch processing
 
-| Flag | Default | Notes |
-|------|---------|-------|
-| `--mode` | `api` | `api` (MuAPI, fast, no setup) or `local` (yt-dlp + faster-whisper + OpenAI + ffmpeg) |
-| `--num-clips` | `3` | How many shorts to render |
-| `--aspect-ratio` | `9:16` | Any ratio; `9:16` for TikTok/Reels, `1:1` for square |
-| `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
-| `--language` | auto | Force Whisper language code (e.g. `en`) |
-| `--subtitles` / `--no-subtitles` | on | Burn word-level karaoke captions into each short (local mode only) |
-| `--output-json` | — | Dump the full result (transcript + all candidates) to a file |
+```bash
+# one URL per line in urls.txt
+xargs -a urls.txt -I{} python main.py "{}" --mode local
+```
 
-### API mode vs Local mode
+## How it works
 
-| Step | API mode (`--mode api`) | Local mode (`--mode local`) |
-|---|---|---|
-| Download | MuAPI `/youtube-download` | `yt-dlp` |
-| Transcription | MuAPI `/openai-whisper` | `faster-whisper` (CPU or CUDA) |
-| Highlight LLM | MuAPI `gpt-5-mini` | OpenAI (`gpt-4o-mini` by default) |
-| Vertical crop | MuAPI `/autocrop` | `ffmpeg` + OpenCV face tracking |
-| Output | hosted URLs | local mp4 paths |
-| Required keys | `MUAPI_API_KEY` | `OPENAI_API_KEY` (+ `ffmpeg` on PATH) |
-
-## How It Works
-
-1. **Download**: Fetches the source video from YouTube
-2. **Transcribe**: MuAPI `/openai-whisper` produces a timestamped transcript (verbose_json segments)
-3. **Detect content type**: An LLM classifies the video (podcast, interview, tutorial, vlog, etc.) and density, so the prompt can be tuned per content style
-4. **Long-video chunking**: Videos > 30 min are split into 20-min overlapping chunks
-5. **Highlight ranking**: An LLM scans the transcript through a virality framework — hook moments, emotional peaks, opinion bombs, revelations, conflict, quotables, story peaks, practical value — and emits ranked candidates with scores 0–100
-6. **Dedupe**: Overlapping candidates are collapsed by score (>50% overlap → keep the higher score)
-7. **Top-N selection**: The top `--num-clips` candidates are selected
-8. **Auto-crop**: Each highlight is rendered as a vertical short at the requested aspect ratio
-
-**Output**: a list of mp4 URLs plus, for each clip, its title, viral score, hook sentence, and a one-line reason explaining why it should perform.
+1. **Download** — `yt-dlp` pulls the source at the requested resolution.
+2. **Transcribe** — `faster-whisper` produces a word-timestamped transcript (CPU or CUDA).
+3. **Classify** — a tiny LLM call categorises the content (podcast, interview, tutorial, vlog, …) and density so the main prompt can be tuned per style.
+4. **Chunk** — videos longer than 30 min are split into 20-min chunks with overlap so cross-boundary clips aren't missed.
+5. **Rank** — the LLM scans the transcript through the virality framework and emits ranked candidates with scores 0-100, a hook sentence, and a one-line reason.
+6. **Dedupe** — overlapping candidates are collapsed by score.
+7. **Select** — the top `--num-clips` candidates survive.
+8. **Crop** — a two-pass face-aware pan produces a smooth 9:16 reframe.
+9. **Burn in captions** — a word-level karaoke ASS track is generated from the Whisper word timestamps and burned into the clip in the same ffmpeg pass that muxes the audio back.
 
 ## Output
 
-Console output looks like:
+Console at the end of a run:
 
 ```
 ========================================================================
-Highlights:    7 candidates → kept top 3
+Mode:          local
+Source video:  output\source_VIDEO_ID.mp4
+Highlights:    13 candidates -> kept top 3
 ========================================================================
 
-#1  score=92  124.3s → 187.6s
-     title:  The one mistake that cost me $50K
-     hook:   "Nobody talks about this, but it killed my first startup..."
-     clip:   https://.../short_1.mp4
-
-#2  score=88  ...
+#1  score=96  629.8s -> 723.2s
+     title:  Semua Pekerjaan Kerah Putih Akan Hilang Sebelum 2030
+     hook:   ...
+     clip:   output\short_01.mp4
 ```
 
-`--output-json result.json` produces:
+`--output-json result.json`:
 
 ```json
 {
-  "source_video_url": "...",
-  "transcript": { "duration": 1873.4, "segments": [...] },
-  "highlights": [ {...}, {...}, ... ],
+  "mode": "local",
+  "source_video_url": "output/source_VIDEO_ID.mp4",
+  "transcript": { "duration": 1800.0, "segments": [ ... ] },
+  "highlights": [ { "...": "..." } ],
   "shorts": [
     {
       "title": "...",
@@ -207,88 +166,87 @@ Highlights:    7 candidates → kept top 3
       "score": 92,
       "hook_sentence": "...",
       "virality_reason": "...",
-      "clip_url": "https://.../short_1.mp4"
+      "clip_url": "output/short_01.mp4"
     }
-  ]
+  ],
+  "subtitles": true
 }
 ```
 
 ## Configuration
 
-### Highlight selection criteria
+### Highlight selection
+
 Edit `shorts_generator/highlights.py`:
-- **Virality framework**: `VIRALITY_CRITERIA` — the ranked list of signals the LLM optimizes for
-- **System prompt**: `HIGHLIGHT_SYSTEM_PROMPT` — duration sweet spot, hook rules, JSON schema
-- **Chunk size**: `CHUNK_SIZE_SECONDS` (default 1200) — chunk length for long videos
-- **Long-video threshold**: `LONG_VIDEO_THRESHOLD` (default 1800) — videos longer than this are chunked
-- **Chunk overlap**: `CHUNK_OVERLAP_SECONDS` (default 60) — overlap between chunks so cross-boundary clips aren't missed
 
-### Polling / timeout
-Edit `shorts_generator/config.py` (or set env vars):
-- `MUAPI_POLL_INTERVAL` (default 5s) — seconds between job-status polls
-- `MUAPI_POLL_TIMEOUT` (default 1800s) — give up after this long
+- `VIRALITY_CRITERIA` — the ranked list of signals the LLM optimises for
+- `HIGHLIGHT_SYSTEM_PROMPT` — duration sweet spot, hook rules, JSON schema
+- `CHUNK_SIZE_SECONDS` (1200) — chunk length for long videos
+- `LONG_VIDEO_THRESHOLD` (1800) — videos longer than this get chunked
+- `CHUNK_OVERLAP_SECONDS` (60) — overlap between chunks
 
-### Whisper transcription
-Audio is transcribed by MuAPI's `/openai-whisper` endpoint (server-side `whisper-1`). Pass `--language <code>` to lock the recognition to a specific language; otherwise it auto-detects.
+### Subtitles
 
-### Subtitles (local mode)
-Local mode can burn word-level karaoke captions into each short: 2-3 words pop in at a time, with the active word swept in yellow as it's spoken — the same look Opus Clip and CapCut use on viral shorts. Enabled by default; toggle with `--subtitles` / `--no-subtitles` (or `SUBTITLES_ENABLED` env).
+All styling is env-configurable. Defaults match the "viral shorts" look — bold uppercase, white with thick black outline, yellow karaoke sweep, bottom-centre.
 
-Tune the look via `.env` (see `.env.example` for the full list):
-
-- `SUBTITLE_FONT` — font family (falls back via fontconfig if missing)
+- `SUBTITLES_ENABLED` — master toggle (default `true`)
+- `SUBTITLE_FONT` — font family (fontconfig fallback if missing)
 - `SUBTITLE_FONT_SIZE_RATIO` — font size as a fraction of video height (default `0.055`)
-- `SUBTITLE_PRIMARY_COLOR` / `SUBTITLE_HIGHLIGHT_COLOR` / `SUBTITLE_OUTLINE_COLOR` — ASS colours (`&HAABBGGRR`)
-- `SUBTITLE_MARGIN_V_RATIO` — distance from the bottom edge as a fraction of height
+- `SUBTITLE_PRIMARY_COLOR` / `SUBTITLE_HIGHLIGHT_COLOR` / `SUBTITLE_OUTLINE_COLOR` — ASS colours `&HAABBGGRR`
+- `SUBTITLE_OUTLINE_WIDTH` — outline thickness
+- `SUBTITLE_MARGIN_V_RATIO` — distance from bottom edge as a fraction of height
 - `SUBTITLE_WORDS_PER_CHUNK` / `SUBTITLE_MAX_CHUNK_SECONDS` — chunking behaviour
 - `SUBTITLE_UPPERCASE`, `SUBTITLE_BOLD` — text styling
 
-Requires `ffmpeg` built with `libass` (standard in the official builds).
+### Camera stabilisation
 
-## Project Structure
+If the pan feels off, tune `_build_pan_trajectory` in `shorts_generator/local/clipper.py`:
+
+- `alpha` (0.08) — lower = more static, higher = more responsive
+- `detect_every` (`fps / 6`) — lower = faster reaction to subject changes, costs CPU
+- median filter `window` (5) — bump to 7 if spurious detections slip through
+
+## Project layout
 
 ```
-AI-Youtube-Shorts-Generator/
+yt-short-generator/
 ├── main.py                       CLI entry point
-├── requirements.txt              core deps (api mode)
-├── requirements-local.txt        optional deps for --mode local
+├── rerender.py                   re-render from a cached local source
+├── requirements.txt              core deps
+├── requirements-local.txt        local-mode deps (yt-dlp, faster-whisper, cv2, openai)
 ├── .env.example
 └── shorts_generator/
-    ├── config.py                 env / settings (MuAPI + OpenAI + Whisper + subtitles)
-    ├── muapi.py                  generic submit + poll wrapper
-    ├── downloader.py             API mode: YouTube download via MuAPI
-    ├── transcriber.py            API mode: MuAPI /openai-whisper client
-    ├── highlights.py             shared LLM virality ranking (pluggable backend)
-    ├── clipper.py                API mode: MuAPI /autocrop
+    ├── config.py                 env / settings (OpenAI + Whisper + subtitles)
+    ├── highlights.py             LLM virality ranking (pluggable backend)
     ├── subtitles.py              word-level karaoke ASS generator + ffmpeg burn-in
-    ├── pipeline.py               mode dispatcher (api ↔ local)
-    └── local/                    --mode local backends (offline)
+    ├── pipeline.py               mode dispatcher (api <-> local)
+    ├── muapi.py                  legacy: MuAPI client (API mode only)
+    ├── downloader.py             legacy: API mode YouTube download
+    ├── transcriber.py            legacy: API mode Whisper
+    ├── clipper.py                legacy: API mode autocrop
+    └── local/                    local-mode pipeline (the one you want)
         ├── downloader.py         yt-dlp download
-        ├── transcriber.py        faster-whisper transcription (word timestamps)
-        ├── llm.py                OpenAI chat-completions client
-        └── clipper.py            ffmpeg cut + OpenCV vertical crop + subtitle burn-in
+        ├── transcriber.py        faster-whisper with word-level timestamps
+        ├── llm.py                OpenAI-compatible chat-completions client
+        └── clipper.py            ffmpeg cut + OpenCV vertical pan + subtitle burn-in
 ```
 
 ## Troubleshooting
 
-### Whisper produced no segments
-The video may have no detectable speech, or it may be in a language Whisper struggles with. Try passing `--language en` (or the correct ISO-639-1 code) to skip auto-detection.
+**Whisper produced no segments.** The video may have no detectable speech or be in a language the base model struggles with. Pass `--language <iso>` to skip auto-detection, or bump `LOCAL_WHISPER_MODEL` to `small` / `medium` / `large-v3`.
 
-### Looking for better results?
-The [AI Clipping API](https://muapi.ai/playground/ai-clipping) uses an improved algorithm that produces higher-quality clips with better highlight detection.
+**`Sign in to confirm you're not a bot` on download.** YouTube rate-limits `yt-dlp` after enough hits from the same IP. Either pass cookies (see yt-dlp docs) or use `rerender.py` against a source you already have locally.
 
-## Contributing
+**`'charmap' codec can't encode character` on Windows.** The default Windows console is cp1252. The CLI forces UTF-8 itself now; if you still see this when scripting around the library, set `PYTHONIOENCODING=utf-8`.
 
-Contributions are welcome! Please fork the repository and submit a pull request.
+**Clips look jittery.** Lower `alpha` in `_build_pan_trajectory` (e.g. `0.05`) or increase the median filter `window`.
+
+**Font missing in the burned-in captions.** libass falls back via fontconfig, but override with `SUBTITLE_FONT` to a family you definitely have installed (e.g. `Arial`, `DejaVu Sans`).
+
+## Credits
+
+This started as a fork of [SamurAIGPT/AI-Youtube-Shorts-Generator](https://github.com/SamurAIGPT/AI-Youtube-Shorts-Generator) and has since been rewritten to focus on a self-hosted local pipeline, word-level karaoke captions, and a stabilised face-aware pan.
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Related Projects
-
-- [AI Influencer Generator](https://github.com/SamurAIGPT/AI-Influencer-Generator)
-- [Text to Video AI](https://github.com/SamurAIGPT/Text-To-Video-AI)
-- [Faceless Video Generator](https://github.com/SamurAIGPT/Faceless-Video-Generator)
-- [AI B-roll Generator](https://github.com/Anil-matcha/AI-B-roll)
-- [No-code YouTube Shorts Generator](https://www.vadoo.tv/clip-youtube-video)
+MIT.
