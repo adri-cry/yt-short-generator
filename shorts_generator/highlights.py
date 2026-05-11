@@ -49,7 +49,7 @@ Your task: identify the most viral-worthy highlights from the transcript.
 
 Rules:
 - Every highlight must open with a strong HOOK — a line that grabs attention within the first 3 seconds
-- Duration sweet spot: 45-90 seconds. Go shorter (20-44s) only for a perfect standalone one-liner. Go longer (91-180s) only when a story arc needs full context to land
+- {duration_instruction}
 - Never cut mid-sentence or mid-thought — each clip must feel complete and self-contained
 - Clips must not overlap significantly with each other
 - Score 0-100 on viral potential (not general quality)
@@ -61,10 +61,28 @@ Respond ONLY with valid JSON (no markdown, no explanation):
 {{"highlights":[{{"title":"string","start_time":float,"end_time":float,"score":int,"hook_sentence":"string","virality_reason":"string"}}]}}"""
 
 
+# Default duration window — matches the original "45-90s sweet spot" behaviour.
+DEFAULT_MIN_DURATION = 45
+DEFAULT_MAX_DURATION = 90
+# Hard safety bounds applied after the LLM returns.
+MIN_DURATION_FLOOR = 5
+MAX_DURATION_CEIL = 300
+
+
 CHUNK_SIZE_SECONDS = 1200       # 20-min chunks for long videos
 LONG_VIDEO_THRESHOLD = 1800     # chunk videos longer than 30 min
 CHUNK_OVERLAP_SECONDS = 60
 GPT_CALL_TIMEOUT_SECONDS = 300  # cap LLM polls at 5 min — a wedged call should fail fast
+
+
+def _build_duration_instruction(min_duration: int, max_duration: int) -> str:
+    """Phrase the duration rule so the LLM actually respects it."""
+    mid = (min_duration + max_duration) // 2
+    return (
+        f"Target duration {min_duration}-{max_duration} seconds "
+        f"(aim for ~{mid}s; never shorter than {min_duration}s, never longer than {max_duration}s). "
+        "Prefer a complete thought over hitting the upper bound exactly."
+    )
 
 
 def call_muapi_llm(prompt: str) -> str:
@@ -154,17 +172,23 @@ def call_highlight_api(
     num_clips: int,
     is_chunk: bool = False,
     llm_fn: LLMFn = call_muapi_llm,
+    min_duration: int = DEFAULT_MIN_DURATION,
+    max_duration: int = DEFAULT_MAX_DURATION,
 ) -> Dict:
     # Ask for ~2× the user's target so dedupe has headroom, but cap so the model
     # doesn't have to generate a huge JSON payload (which times out gpt-5-mini).
     target = max(num_clips * 2, 5)
-    natural_max = max(2 if is_chunk else 3, int(duration / 90))
+    # Base the natural-max on the requested *max* duration rather than a fixed
+    # 90s, so short clips don't cap the candidate pool too aggressively.
+    denom = max(30, max_duration)
+    natural_max = max(2 if is_chunk else 3, int(duration / denom))
     min_clips = min(target, natural_max, 8)
     system = HIGHLIGHT_SYSTEM_PROMPT.format(
         virality_criteria=VIRALITY_CRITERIA,
         content_type=content_info.get("content_type", "other"),
         density=content_info.get("density", "medium"),
         num_clips_instruction=f"Generate at least {min_clips} highlights",
+        duration_instruction=_build_duration_instruction(min_duration, max_duration),
     )
     full_prompt = f"{system}\n\nTranscript:\n{transcript_text}"
     raw = llm_fn(full_prompt)
@@ -192,20 +216,78 @@ def dedupe_highlights(highlights: List[Dict]) -> List[Dict]:
     return kept
 
 
+def _clamp_duration(
+    highlights: List[Dict],
+    min_duration: int,
+    max_duration: int,
+    video_duration: float,
+) -> List[Dict]:
+    """Enforce the user's duration window after the LLM returns.
+
+    The LLM is asked to respect the range but doesn't always comply. This:
+      - Drops clips shorter than `min_duration` (can't stretch them safely).
+      - Trims clips longer than `max_duration` down to `max_duration`, keeping
+        the hook intact by cutting from the tail.
+      - Drops clips that no longer fit after trimming.
+    """
+    min_duration = max(MIN_DURATION_FLOOR, int(min_duration))
+    max_duration = min(MAX_DURATION_CEIL, int(max_duration))
+    if max_duration < min_duration:
+        max_duration = min_duration
+
+    out: List[Dict] = []
+    for h in highlights:
+        try:
+            start = float(h["start_time"])
+            end = float(h["end_time"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        dur = end - start
+        if dur < min_duration:
+            # Too short for the user's floor — skip rather than fake-extend.
+            continue
+        if dur > max_duration:
+            end = start + max_duration
+            h["end_time"] = end
+            dur = end - start
+
+        if video_duration > 0 and end > video_duration:
+            end = video_duration
+            h["end_time"] = end
+            dur = end - start
+            if dur < min_duration:
+                continue
+
+        out.append(h)
+    return out
+
+
 def get_highlights(
     transcript: Dict,
     num_clips: int = 3,
     llm_fn: Optional[LLMFn] = None,
+    min_duration: int = DEFAULT_MIN_DURATION,
+    max_duration: int = DEFAULT_MAX_DURATION,
 ) -> Dict:
     """Main entry point — returns {highlights: [...]} sorted by score.
 
     `llm_fn` swaps the underlying LLM. Defaults to MuAPI gpt-5-mini; local
     mode passes in an OpenAI-backed callable.
+
+    `min_duration` / `max_duration` (seconds) clamp every returned clip to the
+    user's preferred length window — both as a soft hint in the prompt and a
+    hard post-processing filter.
     """
     llm_fn = llm_fn or call_muapi_llm
     duration = transcript.get("duration", 0)
     content_info = detect_content_type(transcript, llm_fn=llm_fn)
-    print(f"[highlights] content={content_info.get('content_type')} density={content_info.get('density')} duration={duration:.0f}s", flush=True)
+    print(
+        f"[highlights] content={content_info.get('content_type')} "
+        f"density={content_info.get('density')} duration={duration:.0f}s "
+        f"clip_window={min_duration}-{max_duration}s",
+        flush=True,
+    )
 
     if duration >= LONG_VIDEO_THRESHOLD:
         chunks = chunk_transcript(transcript)
@@ -215,7 +297,16 @@ def get_highlights(
             offset = chunk.get("_offset", 0)
             text = build_transcript_text(chunk)
             print(f"[highlights] chunk {i + 1}/{len(chunks)} (offset {offset:.0f}s)", flush=True)
-            result = call_highlight_api(text, content_info, chunk["duration"], num_clips=num_clips, is_chunk=True, llm_fn=llm_fn)
+            result = call_highlight_api(
+                text,
+                content_info,
+                chunk["duration"],
+                num_clips=num_clips,
+                is_chunk=True,
+                llm_fn=llm_fn,
+                min_duration=min_duration,
+                max_duration=max_duration,
+            )
             for h in result.get("highlights", []):
                 h["start_time"] = float(h["start_time"]) + offset
                 h["end_time"] = float(h["end_time"]) + offset
@@ -223,7 +314,15 @@ def get_highlights(
         highlights = dedupe_highlights(all_highlights)
     else:
         text = build_transcript_text(transcript)
-        result = call_highlight_api(text, content_info, duration, num_clips=num_clips, llm_fn=llm_fn)
+        result = call_highlight_api(
+            text,
+            content_info,
+            duration,
+            num_clips=num_clips,
+            llm_fn=llm_fn,
+            min_duration=min_duration,
+            max_duration=max_duration,
+        )
         highlights = dedupe_highlights(result.get("highlights", []))
 
     # Clamp any out-of-range timestamps so LLM hallucinations don't crash the
@@ -237,8 +336,10 @@ def get_highlights(
                 continue
             h["start_time"] = max(0.0, start)
             h["end_time"] = min(duration, end)
-            if h["end_time"] - h["start_time"] >= 5:
+            if h["end_time"] - h["start_time"] >= MIN_DURATION_FLOOR:
                 clamped.append(h)
         highlights = clamped
+
+    highlights = _clamp_duration(highlights, min_duration, max_duration, duration)
 
     return {"highlights": highlights}

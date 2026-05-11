@@ -33,6 +33,18 @@ def main() -> int:
     p.add_argument("--aspect-ratio", default="9:16")
     p.add_argument("--language", default=None)
     p.add_argument(
+        "--min-duration",
+        type=int,
+        default=45,
+        help="Minimum clip duration in seconds (default: 45)",
+    )
+    p.add_argument(
+        "--max-duration",
+        type=int,
+        default=90,
+        help="Maximum clip duration in seconds (default: 90)",
+    )
+    p.add_argument(
         "--subtitles",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -73,7 +85,13 @@ def main() -> int:
         return 1
 
     print("[rerender] ranking highlights...", flush=True)
-    hl_result = get_highlights(transcript, num_clips=args.num_clips, llm_fn=call_openai_llm)
+    hl_result = get_highlights(
+        transcript,
+        num_clips=args.num_clips,
+        llm_fn=call_openai_llm,
+        min_duration=args.min_duration,
+        max_duration=args.max_duration,
+    )
     all_highlights = hl_result.get("highlights") or []
     if not all_highlights:
         print("no highlights returned", file=sys.stderr)

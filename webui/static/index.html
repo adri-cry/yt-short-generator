@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>yt-short-generator</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>yt-short-generator</h1>
+    <p class="sub">Turn any YouTube video into ranked vertical shorts with word-level karaoke subtitles.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <h2>New job</h2>
+    <form id="job-form" class="grid">
+      <label class="col-12">
+        <span>YouTube URL</span>
+        <input type="url" id="youtube_url" required placeholder="https://www.youtube.com/watch?v=..." />
+      </label>
+
+      <label class="col-4">
+        <span>Mode</span>
+        <select id="mode">
+          <option value="local" selected>local (offline pipeline)</option>
+          <option value="api">api (MuAPI)</option>
+        </select>
+      </label>
+
+      <label class="col-4">
+        <span># clips</span>
+        <input type="number" id="num_clips" min="1" max="20" value="3" />
+      </label>
+
+      <label class="col-4">
+        <span>Aspect ratio</span>
+        <select id="aspect_ratio">
+          <option value="9:16" selected>9:16 (Shorts / TikTok / Reels)</option>
+          <option value="1:1">1:1 (square)</option>
+          <option value="4:5">4:5 (IG feed)</option>
+          <option value="16:9">16:9 (landscape)</option>
+        </select>
+      </label>
+
+      <label class="col-4">
+        <span>Source resolution</span>
+        <select id="download_format">
+          <option>360</option>
+          <option>480</option>
+          <option selected>720</option>
+          <option>1080</option>
+        </select>
+      </label>
+
+      <label class="col-4">
+        <span>Language (optional)</span>
+        <input type="text" id="language" placeholder="auto — e.g. en, id" />
+      </label>
+
+      <label class="col-4 inline">
+        <input type="checkbox" id="subtitles" checked />
+        <span>Burn word-level subtitles</span>
+      </label>
+
+      <label class="col-6">
+        <span>Min duration per clip (seconds)</span>
+        <input type="number" id="min_duration" min="5" max="300" value="45" />
+      </label>
+
+      <label class="col-6">
+        <span>Max duration per clip (seconds)</span>
+        <input type="number" id="max_duration" min="5" max="300" value="90" />
+      </label>
+
+      <div class="col-12 actions">
+        <button type="submit" id="submit-btn">Generate shorts</button>
+        <span id="form-hint" class="hint"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" id="current-card" hidden>
+    <h2>
+      Current job
+      <span id="current-status" class="status"></span>
+    </h2>
+    <div id="current-meta" class="meta"></div>
+    <pre id="logs" class="logs" aria-live="polite"></pre>
+    <div id="current-result" class="result" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Recent jobs</h2>
+    <ul id="history" class="history"></ul>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>self-hosted · <a href="https://github.com/adri-cry/yt-short-generator" target="_blank" rel="noopener">source</a></span>
+  </div>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

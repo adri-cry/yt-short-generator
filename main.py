@@ -40,6 +40,18 @@ def main() -> int:
         default=None,
         help="Burn word-level karaoke captions into each short (default: SUBTITLES_ENABLED env, ON). Local mode only.",
     )
+    parser.add_argument(
+        "--min-duration",
+        type=int,
+        default=45,
+        help="Minimum clip duration in seconds (default: 45). Clips shorter than this are dropped.",
+    )
+    parser.add_argument(
+        "--max-duration",
+        type=int,
+        default=90,
+        help="Maximum clip duration in seconds (default: 90). Longer clips are trimmed to this length.",
+    )
     parser.add_argument("--output-json", default=None, help="Write the full result JSON to this path")
     args = parser.parse_args()
 
@@ -52,6 +64,8 @@ def main() -> int:
             language=args.language,
             mode=args.mode,
             subtitles=args.subtitles,
+            min_duration=args.min_duration,
+            max_duration=args.max_duration,
         )
     except Exception as e:
         print(f"\nFAILED: {e}", file=sys.stderr)

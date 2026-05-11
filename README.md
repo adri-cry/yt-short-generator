@@ -9,6 +9,7 @@ Built because the existing SaaS options (Opus Clip, Klap, Vidyo.ai, SubMagic, �
 ## What you get
 
 - **YouTube URL in, vertical mp4s out.** Hand it any URL, get back N viral-ready 9:16 shorts saved to `output/`.
+- **Web UI.** Optional FastAPI dashboard — submit jobs from the browser, watch live logs, preview the rendered shorts inline, download with one click.
 - **Word-level karaoke captions.** 2-3 words pop in at a time, active word swept in yellow — the same CapCut/Opus Clip look. Fully configurable via env vars (font, size, colour, position, chunking).
 - **Stabilised face-aware pan.** Two-pass reframing: sample face detections, median-filter the series, linear-interpolate the gaps, exponential-smooth the trajectory, lock the Y axis. No jittery, seasick crops.
 - **LLM highlight ranking.** Videos are scored through a virality framework — hooks, emotional peaks, opinion bombs, revelations, conflict, quotables, story peaks, practical value. Long videos (>30 min) are auto-chunked with overlap so cross-boundary clips aren't lost.
@@ -38,6 +39,8 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 pip install -r requirements-local.txt
+# Optional — only if you want the web UI:
+pip install -r requirements-webui.txt
 ```
 
 Copy `.env.example` to `.env` and fill in your keys:
@@ -88,6 +91,8 @@ python main.py "https://www.youtube.com/watch?v=VIDEO_ID" \
 | `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
 | `--language` | auto | Force Whisper language code, e.g. `en`, `id` |
 | `--subtitles` / `--no-subtitles` | on | Burn word-level karaoke captions (local mode only) |
+| `--min-duration` | `45` | Minimum clip length in seconds. Shorter candidates are dropped |
+| `--max-duration` | `90` | Maximum clip length in seconds. Longer candidates are trimmed |
 | `--output-json` | — | Dump the full run result to a JSON file |
 
 ### Python API
@@ -120,6 +125,31 @@ python rerender.py --source output/source_VIDEO_ID.mp4 --num-clips 3
 # one URL per line in urls.txt
 xargs -a urls.txt -I{} python main.py "{}" --mode local
 ```
+
+### Web UI
+
+There's a lightweight FastAPI dashboard if you'd rather click than type.
+
+```bash
+pip install -r requirements-webui.txt
+python -m webui
+# → http://127.0.0.1:8000
+```
+
+What you get:
+
+- URL submit form with the same knobs as the CLI (mode, num clips, aspect ratio, language, subtitles toggle, min/max clip duration)
+- Live log stream (SSE) so you can watch the pipeline run in real time
+- Inline video previews of the rendered shorts, with one-click download
+- Recent-jobs list that survives page refreshes
+
+Flags:
+
+```bash
+python -m webui --host 0.0.0.0 --port 8000 --reload
+```
+
+Jobs run serialised in-process (the pipeline mutates `sys.stdout`, so a single worker keeps things sane). The server doesn't persist anything to disk — restart and the job list starts clean, but the rendered mp4s stay in `output/`.
 
 ## How it works
 
@@ -214,7 +244,13 @@ yt-short-generator/
 ├── rerender.py                   re-render from a cached local source
 ├── requirements.txt              core deps
 ├── requirements-local.txt        local-mode deps (yt-dlp, faster-whisper, cv2, openai)
+├── requirements-webui.txt        web UI deps (fastapi, uvicorn)
 ├── .env.example
+├── webui/                        optional FastAPI dashboard
+│   ├── app.py                    routes: submit, list, SSE logs, clip serving
+│   ├── jobs.py                   background job runner + log capture
+│   ├── __main__.py               `python -m webui`
+│   └── static/                   single-page HTML/CSS/JS
 └── shorts_generator/
     ├── config.py                 env / settings (OpenAI + Whisper + subtitles)
     ├── highlights.py             LLM virality ranking (pluggable backend)
