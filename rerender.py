@@ -45,14 +45,26 @@ def main() -> int:
         help="Maximum clip duration in seconds (default: 90)",
     )
     p.add_argument(
+        "--whisper-model",
+        default=None,
+        help="faster-whisper model: tiny / base / small / medium / large-v3",
+    )
+    p.add_argument(
+        "--initial-prompt",
+        default=None,
+        help="Whisper bias prompt (names, jargon, brands)",
+    )
+    p.add_argument(
         "--subtitles",
         action=argparse.BooleanOptionalAction,
         default=None,
     )
     p.add_argument(
         "--transcript-cache",
-        default="output/transcript_cache.json",
-        help="Cache transcript to this path so we don't re-transcribe every run.",
+        default=None,
+        help="Cache transcript to this path so we don't re-transcribe every run. "
+             "Defaults to output/transcript_cache_<model>_<lang>.json so switching "
+             "models / languages doesn't hit a stale cache.",
     )
     p.add_argument(
         "--fresh-transcript",
@@ -63,22 +75,35 @@ def main() -> int:
 
     subs_enabled = SUBTITLES_ENABLED if args.subtitles is None else args.subtitles
 
+    # Per-model / per-language cache so switching transcription params
+    # automatically triggers a re-run instead of serving stale data.
+    cache_path = args.transcript_cache
+    if cache_path is None:
+        model_slug = (args.whisper_model or "default").replace("/", "-")
+        lang_slug = args.language or "auto"
+        cache_path = f"output/transcript_cache_{model_slug}_{lang_slug}.json"
+
     transcript = None
-    if args.transcript_cache and not args.fresh_transcript:
+    if cache_path and not args.fresh_transcript:
         try:
-            with open(args.transcript_cache, encoding="utf-8") as f:
+            with open(cache_path, encoding="utf-8") as f:
                 transcript = json.load(f)
-            print(f"[rerender] loaded cached transcript from {args.transcript_cache}", flush=True)
+            print(f"[rerender] loaded cached transcript from {cache_path}", flush=True)
         except FileNotFoundError:
             transcript = None
 
     if transcript is None:
         print("[rerender] transcribing (this is the slow step)...", flush=True)
-        transcript = transcribe_local(args.source, language=args.language)
-        if args.transcript_cache:
-            with open(args.transcript_cache, "w", encoding="utf-8") as f:
+        transcript = transcribe_local(
+            args.source,
+            language=args.language,
+            model_name=args.whisper_model,
+            initial_prompt=args.initial_prompt,
+        )
+        if cache_path:
+            with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(transcript, f)
-            print(f"[rerender] cached transcript -> {args.transcript_cache}", flush=True)
+            print(f"[rerender] cached transcript -> {cache_path}", flush=True)
 
     if not transcript.get("segments"):
         print("no segments transcribed", file=sys.stderr)

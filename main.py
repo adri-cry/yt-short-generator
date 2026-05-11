@@ -52,6 +52,19 @@ def main() -> int:
         default=90,
         help="Maximum clip duration in seconds (default: 90). Longer clips are trimmed to this length.",
     )
+    parser.add_argument(
+        "--whisper-model",
+        default=None,
+        help="faster-whisper model: tiny / base / small / medium / large-v3. "
+             "Bigger = much better accuracy, especially for non-English audio. "
+             "Defaults to LOCAL_WHISPER_MODEL env (base).",
+    )
+    parser.add_argument(
+        "--initial-prompt",
+        default=None,
+        help="Whisper bias prompt — comma-separated names, jargon, brands, "
+             "or a sample sentence to steer spellings (e.g. 'Luna Maya, Raffi Ahmad, Gojek, Tokopedia').",
+    )
     parser.add_argument("--output-json", default=None, help="Write the full result JSON to this path")
     args = parser.parse_args()
 
@@ -66,6 +79,8 @@ def main() -> int:
             subtitles=args.subtitles,
             min_duration=args.min_duration,
             max_duration=args.max_duration,
+            whisper_model=args.whisper_model,
+            initial_prompt=args.initial_prompt,
         )
     except Exception as e:
         print(f"\nFAILED: {e}", file=sys.stderr)

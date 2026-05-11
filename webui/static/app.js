@@ -25,6 +25,8 @@ async function loadDefaults() {
     $("#mode").value = d.mode || "local";
     if (typeof d.min_duration === "number") $("#min_duration").value = d.min_duration;
     if (typeof d.max_duration === "number") $("#max_duration").value = d.max_duration;
+    // Leave the Whisper dropdown on "default" — the selected option
+    // falls back to LOCAL_WHISPER_MODEL server-side.
   } catch (e) {
     /* ignore — defaults in the HTML are fine */
   }
@@ -72,7 +74,9 @@ function renderMeta(job) {
   if (p.min_duration || p.max_duration) {
     bits.push(`duration: ${p.min_duration || "?"}-${p.max_duration || "?"}s`);
   }
+  if (p.whisper_model) bits.push(`whisper: ${p.whisper_model}`);
   if (p.language) bits.push(`lang: ${p.language}`);
+  if (p.initial_prompt) bits.push(`prompt: "${p.initial_prompt.slice(0, 40)}${p.initial_prompt.length > 40 ? "..." : ""}"`);
   currentMeta.textContent = bits.join("  ·  ");
 }
 
@@ -219,6 +223,8 @@ form.addEventListener("submit", async (ev) => {
     subtitles: $("#subtitles").checked,
     min_duration: minDur,
     max_duration: maxDur,
+    whisper_model: $("#whisper_model").value || null,
+    initial_prompt: $("#initial_prompt").value.trim() || null,
   };
 
   try {

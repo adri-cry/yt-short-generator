@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from shorts_generator.config import LOCAL_OUTPUT_DIR, SUBTITLES_ENABLED
+from shorts_generator.config import LOCAL_OUTPUT_DIR, LOCAL_WHISPER_MODEL, SUBTITLES_ENABLED
 from shorts_generator.highlights import DEFAULT_MAX_DURATION, DEFAULT_MIN_DURATION
 
 from .jobs import runner
@@ -41,6 +41,8 @@ class JobSubmit(BaseModel):
     subtitles: Optional[bool] = None
     min_duration: int = Field(default=DEFAULT_MIN_DURATION, ge=5, le=300)
     max_duration: int = Field(default=DEFAULT_MAX_DURATION, ge=5, le=300)
+    whisper_model: Optional[str] = None
+    initial_prompt: Optional[str] = None
 
 
 app = FastAPI(title="yt-short-generator web UI")
@@ -64,6 +66,8 @@ def defaults() -> dict:
         "output_dir": LOCAL_OUTPUT_DIR,
         "min_duration": DEFAULT_MIN_DURATION,
         "max_duration": DEFAULT_MAX_DURATION,
+        "whisper_model": LOCAL_WHISPER_MODEL,
+        "whisper_model_options": ["tiny", "base", "small", "medium", "large-v3"],
     }
 
 
@@ -84,6 +88,8 @@ def submit_job(body: JobSubmit) -> dict:
         "subtitles": body.subtitles,
         "min_duration": body.min_duration,
         "max_duration": body.max_duration,
+        "whisper_model": (body.whisper_model or "").strip() or None,
+        "initial_prompt": (body.initial_prompt or "").strip() or None,
     }
     job = runner.submit(params)
     return job.snapshot()

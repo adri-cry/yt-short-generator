@@ -30,6 +30,8 @@ def _run_local(
     subtitles: bool,
     min_duration: int,
     max_duration: int,
+    whisper_model: Optional[str],
+    initial_prompt: Optional[str],
 ) -> Dict:
     from .local.clipper import crop_highlights_local
     from .local.downloader import download_youtube_local
@@ -38,7 +40,12 @@ def _run_local(
 
     source_path = download_youtube_local(youtube_url, fmt=download_format)
 
-    transcript = transcribe_local(source_path, language=language)
+    transcript = transcribe_local(
+        source_path,
+        language=language,
+        model_name=whisper_model,
+        initial_prompt=initial_prompt,
+    )
     if not transcript["segments"]:
         raise RuntimeError(
             "Whisper produced no segments. The video may have no detectable speech."
@@ -75,6 +82,7 @@ def _run_local(
         "shorts": shorts,
         "subtitles": subtitles,
         "clip_duration_range": [min_duration, max_duration],
+        "whisper_model": whisper_model,
     }
 
 
@@ -87,11 +95,18 @@ def _run_api(
     subtitles: bool,
     min_duration: int,
     max_duration: int,
+    whisper_model: Optional[str],
+    initial_prompt: Optional[str],
 ) -> Dict:
     if subtitles:
         print(
             "[pipeline] note: --subtitles is currently only implemented for --mode local; "
             "API-mode clips will be rendered without burn-in.",
+            flush=True,
+        )
+    if whisper_model or initial_prompt:
+        print(
+            "[pipeline] note: --whisper-model / --initial-prompt only apply in --mode local",
             flush=True,
         )
 
@@ -140,6 +155,8 @@ def generate_shorts(
     subtitles: Optional[bool] = None,
     min_duration: int = DEFAULT_MIN_DURATION,
     max_duration: int = DEFAULT_MAX_DURATION,
+    whisper_model: Optional[str] = None,
+    initial_prompt: Optional[str] = None,
 ) -> Dict:
     """Run the full pipeline and return a structured result.
 
@@ -156,6 +173,12 @@ def generate_shorts(
             Only effective in --mode local for now.
         min_duration / max_duration: preferred clip length in seconds.
             Defaults to 45-90s. Both a prompt hint and a hard post-filter.
+        whisper_model: faster-whisper model id ("tiny" / "base" / "small" /
+            "medium" / "large-v3"). Defaults to LOCAL_WHISPER_MODEL env.
+            Only used in local mode. Larger = more accurate, especially for
+            non-English audio. Affects subtitle text accuracy directly.
+        initial_prompt: glossary-style hint for the Whisper decoder — names,
+            jargon, spellings to bias toward. Local mode only.
 
     Returns:
         {
@@ -166,6 +189,7 @@ def generate_shorts(
           "shorts": [...],           # top `num_clips` with clip_url / local path
           "subtitles": bool,         # whether subtitles were burned in
           "clip_duration_range": [min, max],
+          "whisper_model": str | None,
         }
     """
     mode = (mode or "api").lower()
@@ -176,12 +200,17 @@ def generate_shorts(
     if max_d < min_d:
         raise ValueError(f"max_duration ({max_d}) must be >= min_duration ({min_d})")
 
+    model_name = (whisper_model or "").strip() or None
+    prompt = (initial_prompt or "").strip() or None
+
     if mode == "local":
         return _run_local(
-            youtube_url, num_clips, aspect_ratio, download_format, language, subs, min_d, max_d
+            youtube_url, num_clips, aspect_ratio, download_format, language, subs,
+            min_d, max_d, model_name, prompt,
         )
     if mode == "api":
         return _run_api(
-            youtube_url, num_clips, aspect_ratio, download_format, language, subs, min_d, max_d
+            youtube_url, num_clips, aspect_ratio, download_format, language, subs,
+            min_d, max_d, model_name, prompt,
         )
     raise ValueError(f"Unknown mode: {mode!r}. Use 'api' or 'local'.")

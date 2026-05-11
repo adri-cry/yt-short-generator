@@ -58,7 +58,24 @@
 
       <label class="col-4">
         <span>Language (optional)</span>
-        <input type="text" id="language" placeholder="auto — e.g. en, id" />
+        <select id="language">
+          <option value="">auto</option>
+          <option value="en">en — English</option>
+          <option value="id">id — Bahasa Indonesia</option>
+          <option value="ja">ja — Japanese</option>
+          <option value="ko">ko — Korean</option>
+          <option value="zh">zh — Chinese</option>
+          <option value="es">es — Spanish</option>
+          <option value="fr">fr — French</option>
+          <option value="de">de — German</option>
+          <option value="it">it — Italian</option>
+          <option value="pt">pt — Portuguese</option>
+          <option value="ru">ru — Russian</option>
+          <option value="ar">ar — Arabic</option>
+          <option value="hi">hi — Hindi</option>
+          <option value="vi">vi — Vietnamese</option>
+          <option value="th">th — Thai</option>
+        </select>
       </label>
 
       <label class="col-4 inline">
@@ -74,6 +91,23 @@
       <label class="col-6">
         <span>Max duration per clip (seconds)</span>
         <input type="number" id="max_duration" min="5" max="300" value="90" />
+      </label>
+
+      <label class="col-6">
+        <span>Whisper model <small class="hint-inline">(bigger = more accurate, slower)</small></span>
+        <select id="whisper_model">
+          <option value="">default (from .env)</option>
+          <option value="tiny">tiny (fastest, weakest)</option>
+          <option value="base">base</option>
+          <option value="small">small (recommended for non-English)</option>
+          <option value="medium">medium (best quality/speed)</option>
+          <option value="large-v3">large-v3 (slowest, best)</option>
+        </select>
+      </label>
+
+      <label class="col-6">
+        <span>Glossary / initial prompt <small class="hint-inline">(names, brands, jargon — biases spelling)</small></span>
+        <input type="text" id="initial_prompt" placeholder="e.g. Luna Maya, Raffi Ahmad, Gojek, Tokopedia" />
       </label>
 
       <div class="col-12 actions">

@@ -91,6 +91,8 @@ python main.py "https://www.youtube.com/watch?v=VIDEO_ID" \
 | `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
 | `--language` | auto | Force Whisper language code, e.g. `en`, `id` |
 | `--subtitles` / `--no-subtitles` | on | Burn word-level karaoke captions (local mode only) |
+| `--whisper-model` | `base` (env) | faster-whisper model: `tiny` / `base` / `small` / `medium` / `large-v3`. Bigger = much better accuracy, especially for non-English |
+| `--initial-prompt` | — | Glossary / bias prompt for Whisper — names, brands, jargon (e.g. `"Luna Maya, Raffi Ahmad, Gojek"`). Fixes most "wrong word" subtitles |
 | `--min-duration` | `45` | Minimum clip length in seconds. Shorter candidates are dropped |
 | `--max-duration` | `90` | Maximum clip length in seconds. Longer candidates are trimmed |
 | `--output-json` | — | Dump the full run result to a JSON file |
@@ -283,6 +285,21 @@ yt-short-generator/
 ## Troubleshooting
 
 **Whisper produced no segments.** The video may have no detectable speech or be in a language the base model struggles with. Pass `--language <iso>` to skip auto-detection, or bump `LOCAL_WHISPER_MODEL` to `small` / `medium` / `large-v3`.
+
+**Subtitle text is wrong — transcribes words the speaker never said.** This is a Whisper accuracy problem, not a subtitle-rendering bug. Fixes, in order of impact:
+
+1. **Use a bigger Whisper model.** `base` (the default) is *noticeably* weaker on non-English audio. Set `--whisper-model small` or `medium`. For Bahasa Indonesia / Japanese / Korean / Chinese or mixed-language podcasts, `medium` is the realistic minimum for clean captions.
+2. **Lock the language.** If auto-detect keeps flipping mid-video, pass `--language id` (or whichever ISO code). Auto-detect uses the first ~30s only, which gets it wrong on intros.
+3. **Seed the glossary.** Proper nouns, brand names, and technical terms are where small models hallucinate most. Pass them as `--initial-prompt`:
+   ```bash
+   python main.py "..." --mode local \
+       --whisper-model medium \
+       --language id \
+       --initial-prompt "Luna Maya, Raffi Ahmad, Gojek, Tokopedia, Shopee"
+   ```
+4. **Higher source audio quality.** `--format 720` already pulls a decent track; if the upstream mic is bad, no Whisper model will save you.
+
+Tradeoff: jumping from `base` → `medium` costs ~4-6× transcription time on CPU. `small` is the sweet spot for most use cases on laptops.
 
 **`Sign in to confirm you're not a bot` on download.** YouTube rate-limits `yt-dlp` after enough hits from the same IP. Either pass cookies (see yt-dlp docs) or use `rerender.py` against a source you already have locally.
 
