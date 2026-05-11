@@ -136,6 +136,19 @@ python -m webui
 # → http://127.0.0.1:8000
 ```
 
+> **Windows tip:** Make sure you're running Python from the project `.venv`, not whatever interpreter `python` resolves to first. The easiest way is to use the launcher:
+>
+> ```powershell
+> # PowerShell
+> .\run-webui.ps1
+> ```
+> ```cmd
+> :: cmd
+> run-webui.bat
+> ```
+>
+> Both pass args through, so `./run-webui.ps1 --host 0.0.0.0 --port 8080` works. If you try to start it with a Python that doesn't have the local-mode deps installed, the server will print a warning at startup pointing you at the right interpreter.
+
 What you get:
 
 - URL submit form with the same knobs as the CLI (mode, num clips, aspect ratio, language, subtitles toggle, min/max clip duration)
