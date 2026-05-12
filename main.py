@@ -27,8 +27,8 @@ def main() -> int:
     parser.add_argument(
         "--mode",
         choices=["api", "local"],
-        default="api",
-        help="api (default, MuAPI) or local (yt-dlp + faster-whisper + OpenAI + ffmpeg).",
+        default="local",
+        help="local (default, yt-dlp + faster-whisper + OpenAI/9-router + ffmpeg) or api (MuAPI cloud).",
     )
     parser.add_argument("--num-clips", type=int, default=3, help="How many shorts to render (default: 3)")
     parser.add_argument("--aspect-ratio", default="9:16", help="Output aspect ratio (default: 9:16)")
