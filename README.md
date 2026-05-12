@@ -22,7 +22,8 @@ Built because the existing SaaS options (Opus Clip, Klap, Vidyo.ai, SubMagic, �
 - **Python 3.10+** (tested on 3.11 and 3.14)
 - **ffmpeg** on your PATH, ideally with `libass` support (the official Windows/macOS/Linux builds all ship it)
 - An **OpenAI-compatible LLM key** — OpenAI, a local router, whatever you prefer
-- CPU is fine for `faster-whisper` at the `base` model; CUDA if you want it faster or want to run `large-v3`
+- **Low-spec PC (CPU only):** Use `LOCAL_WHISPER_MODEL=base` (default) — takes a few minutes per video, no GPU needed.
+- **Has NVIDIA GPU:** Set `LOCAL_WHISPER_DEVICE=cuda` in `.env` — lets you run `medium` or `large-v3` at 5-10× speed.
 
 ## Install
 

@@ -6,7 +6,7 @@ directly off disk.
 import os
 from typing import Optional
 
-from ..config import LOCAL_OUTPUT_DIR
+from ..config import LOCAL_OUTPUT_DIR, YT_COOKIES_FROM_BROWSER, YT_COOKIE_FILE
 
 
 def _import_ytdlp():
@@ -47,6 +47,13 @@ def download_youtube_local(video_url: str, fmt: str = "720", out_dir: Optional[s
         "no_warnings": True,
         "noprogress": True,
     }
+    if YT_COOKIE_FILE:
+        ydl_opts["cookiefile"] = YT_COOKIE_FILE
+    elif YT_COOKIES_FROM_BROWSER:
+        ydl_opts["cookiesfrombrowser"] = (YT_COOKIES_FROM_BROWSER,)
+    else:
+        # Android client workaround — bypasses "sign in to confirm you're not a bot"
+        ydl_opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(video_url, download=True)
