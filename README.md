@@ -4,7 +4,7 @@ Turn any long-form YouTube video into ranked, vertical shorts — all offline on
 
 Built because the existing SaaS options (Opus Clip, Klap, Vidyo.ai, SubMagic, …) charge monthly subscriptions, cap your minutes, and watermark free-tier output. This runs locally with `yt-dlp` + `faster-whisper` + `ffmpeg` + OpenCV, plus any OpenAI-compatible LLM endpoint you point it at.
 
-> Status: local mode is the main pipeline and what I actually use day-to-day. A legacy API mode that delegates each step to MuAPI is still present in the code for reference, but it's not the path I ship against.
+> **Default mode is now `local`.** The legacy `api` mode (MuAPI cloud) is still in the code for reference but is no longer the default.
 
 ## What you get
 
@@ -13,7 +13,7 @@ Built because the existing SaaS options (Opus Clip, Klap, Vidyo.ai, SubMagic, �
 - **Word-level karaoke captions.** 2-3 words pop in at a time, active word swept in yellow — the same CapCut/Opus Clip look. Fully configurable via env vars (font, size, colour, position, chunking).
 - **Stabilised face-aware pan.** Two-pass reframing: sample face detections, median-filter the series, linear-interpolate the gaps, exponential-smooth the trajectory, lock the Y axis. No jittery, seasick crops.
 - **LLM highlight ranking.** Videos are scored through a virality framework — hooks, emotional peaks, opinion bombs, revelations, conflict, quotables, story peaks, practical value. Long videos (>30 min) are auto-chunked with overlap so cross-boundary clips aren't lost.
-- **Works with any OpenAI-compatible LLM.** OpenAI direct, Azure, self-hosted router, 9router — just set `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`.
+- **Works with any OpenAI-compatible LLM.** OpenAI, 9-router, LiteLLM, Ollama, vLLM, Azure — just set `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL` in `.env`. See `.env.example` for configs including Anthropic Claude, Google Gemini, and Groq via a routing gateway.
 - **CLI + Python lib.** Run from the shell or `from shorts_generator import generate_shorts` in your own code.
 - **Structured JSON output.** `--output-json` dumps the full transcript + every candidate highlight + final clip paths for downstream automation.
 
@@ -43,13 +43,23 @@ pip install -r requirements-local.txt
 pip install -r requirements-webui.txt
 ```
 
-Copy `.env.example` to `.env` and fill in your keys:
+Copy `.env.example` to `.env` and configure your LLM. Pick **one** backend:
 
 ```ini
-# LLM highlight ranking — any OpenAI-compatible endpoint
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1   # or your router
-OPENAI_MODEL=gpt-4o-mini                    # or claude, etc.
+# --- Option A: OpenAI-compatible gateway (recommended) ---
+# Works with 9-router, LiteLLM, Ollama, vLLM, etc.
+# Routes to OpenAI, Anthropic, Google, Groq, Mistral, or any provider.
+OPENAI_API_KEY=sk-your_router_key_here
+OPENAI_BASE_URL=http://localhost:20128/v1
+OPENAI_MODEL=oc/deepseek-v4-flash-free
+
+# --- Option B: OpenAI official ---
+# OPENAI_API_KEY=sk-your_openai_key_here
+# OPENAI_MODEL=gpt-4o-mini
+
+# --- Option C: MuAPI cloud (legacy) ---
+# Run with --mode api. No OPENAI_* vars needed.
+# MUAPI_API_KEY=your_muapi_key_here
 
 # Whisper (fully local)
 LOCAL_WHISPER_MODEL=base        # tiny / base / small / medium / large-v3
@@ -62,8 +72,8 @@ Subtitle styling env vars live alongside these — see `.env.example` for the fu
 ## Usage
 
 ```bash
-# Simplest run — local mode, 3 shorts with burned-in karaoke captions
-python main.py "https://www.youtube.com/watch?v=VIDEO_ID" --mode local
+# Simplest run — 3 shorts with burned-in karaoke captions
+python main.py "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 Rendered clips land in `./output/short_01.mp4`, `short_02.mp4`, …
@@ -85,7 +95,7 @@ python main.py "https://www.youtube.com/watch?v=VIDEO_ID" \
 
 | Flag | Default | Notes |
 |------|---------|-------|
-| `--mode` | `api` | `local` runs the full offline pipeline (the one this repo is built around) |
+| `--mode` | `local` | `local` (default) runs the full offline pipeline; `api` uses MuAPI cloud |
 | `--num-clips` | `3` | How many shorts to render |
 | `--aspect-ratio` | `9:16` | Any ratio; `9:16` for TikTok/Reels/Shorts, `1:1` for square |
 | `--format` | `720` | Source download resolution: `360` / `480` / `720` / `1080` |
@@ -219,6 +229,18 @@ Highlights:    13 candidates -> kept top 3
 ```
 
 ## Configuration
+
+### LLM provider
+
+The highlight-ranking LLM uses any OpenAI-compatible endpoint. Configure via `.env`:
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `OPENAI_API_KEY` | Yes | — | Your API key (OpenAI, 9-router, LiteLLM, etc.) |
+| `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | Custom endpoint for routers/gateways |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | Model name — any model your endpoint supports |
+
+See `.env.example` for ready-to-use configs for 9-router, OpenAI, Anthropic Claude (via gateway), and Google Gemini (via gateway).
 
 ### Highlight selection
 
